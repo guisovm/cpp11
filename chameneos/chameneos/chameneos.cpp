@@ -1,15 +1,15 @@
 // chameneos.cpp : Defines the entry point for the console application.
 //
 
-#include "stdafx.h"
+//#include "stdafx.h"
 #include <iostream>
 #include <cassert>
 #include <thread>
 #include <atomic>
-#include <memory>
+//#include <memory>
 #include <vector>
 #include <string>
-#include <chrono>
+//#include <chrono>
 
 using namespace std;
 
@@ -19,7 +19,7 @@ enum color
     unknown = 0,
     blue,
     red,
-    yellow,
+    yellow
 };
 
 const char* color_names[] = { "unknown", "blue", "red", "yellow" };
@@ -77,7 +77,12 @@ string spell_n(size_t n)
 }
 
 
+#ifdef __WIN32
 #define ALIGNED_DECL __declspec(align(64))
+#else
+#define ALIGNED_DECL
+#endif
+
 
 ALIGNED_DECL class MeetingPlace
 {
@@ -104,8 +109,8 @@ ALIGNED_DECL class Chameneos
 public:
 
     Chameneos(size_t id, color color, const shared_ptr<MeetingPlace>& place, Team& team)
-        : id_(id), color_(color), place_(place), team_(team),
-          meet_count_(0), meet_self_count_(0), meeting_completed_(false)
+        : id_(id), color_(color), meet_count_(0), meet_self_count_(0),
+          meeting_completed_(false), place_(place), team_(team)
     {}
 
     void start()
@@ -113,7 +118,7 @@ public:
         assert(!thread_);
         thread_.reset(new thread(bind(&Chameneos::run, this)));
     }
-    
+
     void join()
     {
         assert(thread_);
@@ -127,13 +132,13 @@ public:
 private:
 
     void run();
-    
+
     const size_t id_;
 
     color color_;
     size_t meet_count_;
     size_t meet_self_count_;
-	bool meeting_completed_;
+    bool meeting_completed_;
 
     shared_ptr<MeetingPlace> place_;
     unique_ptr<thread> thread_;
@@ -144,7 +149,7 @@ private:
 void Chameneos::run()
 {
     auto& p_state = place_->state();
-	unsigned int state = p_state.load(memory_order_relaxed);
+    unsigned int state = p_state.load(memory_order_relaxed);
 
     for (;;)
     {
@@ -158,7 +163,7 @@ void Chameneos::run()
         else
             break;
 
-		if (p_state.compare_exchange_weak(state, xchg, memory_order_relaxed))
+        if (p_state.compare_exchange_weak(state, xchg, memory_order_relaxed))
         {
             if (peer_idx)
             {
@@ -167,9 +172,9 @@ void Chameneos::run()
 
                 peer->color_ = new_color;
                 ++peer->meet_count_;
-				
-				atomic_thread_fence(memory_order_release);
-				peer->meeting_completed_ = true;
+
+                //std::atomic_thread_fence(memory_order_release);
+                peer->meeting_completed_ = true;
 
                 color_ = new_color;
                 ++meet_count_;
@@ -179,19 +184,19 @@ void Chameneos::run()
             }
             else
             {
-				//do { this_thread::yield(); }
-				//while (!meeting_completed_);
+                //do { this_thread::yield(); }
+                //while (!meeting_completed_);
 
-				size_t spin_count = numeric_limits<size_t>::max() >> 8;
-				while (!meeting_completed_)
-				{
-					if (spin_count > 0)
-						--spin_count;
-					else
-						this_thread::yield();
-				}
+                size_t spin_count = numeric_limits<size_t>::max() >> 8;
+                while (!meeting_completed_)
+                {
+                    if (spin_count > 0)
+                        --spin_count;
+                    else
+                        this_thread::yield();
+                }
 
-				meeting_completed_ = false;
+                meeting_completed_ = false;
             }
         }
     }
@@ -203,8 +208,9 @@ void init_and_start(vector<ChameneosPtr>& team, const color* initial_colors, con
     assert(initial_colors);
 
     auto place = make_shared<MeetingPlace>(meet_count << MEET_COUNT_SHIFT);
+
     for (size_t i = 0; initial_colors[i] != color::unknown; ++i)
-		team.emplace_back(new Chameneos(i+1, initial_colors[i], place, team));
+        team.emplace_back(new Chameneos(i+1, initial_colors[i], place, team));
 
     for (auto i = team.begin(); i != team.end(); ++i)
         (*i)->start();
@@ -249,27 +255,27 @@ void run(size_t meet_count)
     vector<ChameneosPtr> team1;
     vector<ChameneosPtr> team2;
 
-	chrono::system_clock::time_point start = chrono::system_clock::now();
+    chrono::system_clock::time_point start = chrono::system_clock::now();
 
-	init_and_start(team1, initial_colors1, meet_count);
+    init_and_start(team1, initial_colors1, meet_count);
     init_and_start(team2, initial_colors2, meet_count);
 
     join_and_print(team1, initial_colors1);
     join_and_print(team2, initial_colors2);
 
     chrono::duration<double> elapsed = chrono::system_clock::now() - start;
-	cout << "finished in " << elapsed.count() << "s" << endl << endl;
+    cout << "finished in " << elapsed.count() << "s" << endl << endl;
 }
 
 int main(int argc, char* argv[])
 {
-    size_t meet_count = 6000000;
+    size_t meet_count = 600;
     if (argc > 1 && atoi(argv[1]) > 0)
         meet_count = atoi(argv[1]);
 
-	print_colors();
-	run(meet_count);
+    print_colors();
+    run(meet_count);
 
-	return 0;
+    return 0;
 }
 
